@@ -197,9 +197,9 @@ def plot_datasets(N):
 def generate_data(dataset, N):
     dataset = dataset.lower()
 
-    if dataset is 'barbell':
+    if dataset == 'barbell':
         X, C = barbell(N)
-    elif dataset is 'tree':
+    elif dataset == 'tree':
         X, C = tree(N)
     elif dataset == 'noisy tree':
         X, C = noisy_tree(N)
@@ -220,7 +220,7 @@ def generate_data(dataset, N):
     return X, C
 
 
-def condense(X, eps = None):
+def condense(X, eps = None, num_steps = math.inf):
     N = np.shape(X)[0]
     Q_p = np.eye(N)
     Q_diff = math.inf
@@ -231,6 +231,7 @@ def condense(X, eps = None):
     
     i = 0
     i_prev = -2
+    steps = 0
     while i - i_prev > 1:
         i_prev = i
         while Q_diff >= 1e-4:
@@ -255,16 +256,30 @@ def condense(X, eps = None):
             #Save data
             X = X_1.copy()
             Xs.append(X)
+
+            steps += 1
+            if steps == num_steps:
+                return Xs
         eps *= 2
         Q_diff = math.inf
     return Xs
 
 
-def plot_diffusion(Xs, C):
+def plot_diffusion(Xs, C, dataset):
     '''Plot the diffusion process over time.'''
     cols = 5
-    rows = np.shape(Xs)[0] // cols + 1
-    fig, ax = plt.subplots(rows, cols, figsize = (20, rows * 5))
+    rows = np.shape(Xs)[0] // cols
+    if np.shape(Xs)[0] % cols != 0:
+        rows += 1
+
+    if dataset == 'barbell':
+        h = 2
+    elif dataset in {'clusters', 'uniform circle', 'hyperuniform circle', 'two spirals'}:
+        h = 3
+    else:
+        h = 3.25
+
+    fig, ax = plt.subplots(rows, cols, figsize = (20, rows * h))
     for i in range(rows):
         for j in range(cols):
             index = i * cols + j
@@ -282,12 +297,12 @@ def plot_diffusion(Xs, C):
             ax[i][j].set_aspect('equal')
 
 
-def make_plots(dataset, N):
+def make_plots(dataset, N, num_steps = 50):
     X, C = generate_data(dataset, N)
     if X is None:
         return
-    Xs = condense(X.T)
-    plot_diffusion(Xs, C)
+    Xs = condense(X.T, num_steps = num_steps)
+    plot_diffusion(Xs, C, dataset)
 
 
 # Graph Kernel
@@ -378,3 +393,61 @@ def mgk(g1, g2, k_v = indicator_kernel, k_e = gaussian_kernel):
     
     Vxroo = tree_kernel(g1, g2)
     return px.T @ Vxroo
+
+
+def rand_graph(n):
+    v = np.random.choice(['K', 'R'], size = n)
+    e_m = np.random.choice(range(10), size = (n, n), p = [0.5] + 9 * [0.5 / 9])
+    e_m = e_m + e_m.T
+    e_m = e_m - np.diag(np.diag(e_m))
+
+    e = dict()
+    for row in range(n):
+        for col in range(row + 1, n):
+            e[(row, col)] = (e_m[row][col], 1)
+    
+    return (v, e)
+
+
+v0 = ['R', 'K']
+e0 = {(0, 1): (1, 1)}
+g0 = (v0, e0)
+
+
+v1 = ['K', 'R', 'K', 'R']
+e1 = {(0, 1): (1, 1), (1, 2): (1, 1), (1, 3): (1, 1)}
+g1 = (v1, e1)
+
+
+g2 = rand_graph(10)
+
+
+def plot_adj():
+    fig, ax = plt.subplots(1, 3, figsize = (20, 5))
+    img0 = ax[0].imshow(adj_matrix(g0))
+    img1 = ax[1].imshow(adj_matrix(g1))
+    img2 = ax[2].imshow(adj_matrix(g2))
+    ax[0].set_title(r'Adjacency Matrix of $G_0$')
+    ax[1].set_title(r'Adjacency Matrix of $G_1$')
+    ax[2].set_title(r'Adjacency Matrix of $G_2$')
+    fig.colorbar(img0, ax = ax[0])
+    fig.colorbar(img1, ax = ax[1])
+    fig.colorbar(img2, ax = ax[2])
+
+def plot_z():
+    fig, ax = plt.subplots(1, 3, figsize = (20, 5))
+    n0 = len(g0[0])
+    n1 = len(g1[0])
+    n2 = len(g2[0])
+    z0 = tree_kernel(g0, g0).reshape(n0, n0)
+    z1 = tree_kernel(g1, g1).reshape(n1, n1)
+    z2 = tree_kernel(g2, g2).reshape(n2,  n2)
+    img0 = ax[0].imshow(z0)
+    img1 = ax[1].imshow(z1)
+    img2 = ax[2].imshow(z2)
+    ax[0].set_title(r'$V_{\times}r_{\infty}$ of $G_0$')
+    ax[1].set_title(r'$V_{\times}r_{\infty}$ of $G_1$')
+    ax[2].set_title(r'$V_{\times}r_{\infty}$ of $G_2$')
+    fig.colorbar(img0, ax = ax[0])
+    fig.colorbar(img1, ax = ax[1])
+    fig.colorbar(img2, ax = ax[2])
